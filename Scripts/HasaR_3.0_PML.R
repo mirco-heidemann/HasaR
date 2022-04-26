@@ -33,7 +33,7 @@
 ## ----
 
 ## HIER DAS DATUM DES RADARBILDS ANGEBEN
-eventDat <- '28.06.2021'
+eventDat <- 'PML Szenario'
 
 ## relative pfade spezifizieren
 # setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -50,7 +50,8 @@ pth_data <- ("Data/")
 pth_tbl <- ("Data/tables/")
 pth_func <- ("Data/rfunctions/")
 pth_pres <- ("Output/")
-pth_tif <- ("Data/radarTiffs/")
+# pth_tif <- ("Data/radarTiffs/")
+pth_tif <- ("Data/manipulated_radarTiffs/")
 pth_rdata <- ("Data/rdata/")
 pth_shp <- ("Data/shapes/")
 
@@ -70,6 +71,10 @@ poh_name <- paste0('poh.', format(dat, "%Y%m%d"),'.tif')
 meshs_name <- sub('poh', 'meshs', poh_name)
 ## meteoSchweiz schickt die POH als tif-files, die MESHS aber als tiff-Files
 meshs_name <- sub('tif', 'tiff', meshs_name)
+
+# PML Szenario
+poh_name <- 'poh_PML_20210628.tif'
+meshs_name <- 'meshs_PML_20210628.tiff'
 
 ## load the HasaR model:
 load(paste0(pth_rdata, 'mLogit.rda'))
@@ -95,6 +100,9 @@ y.cellsize <- poh_sum$grid$cellsize[2]
 per_string <- unlist(strsplit(poh_name, '\\poh.'))[2]
 per_string <- unlist(strsplit(per_string, '\\.'))[1]
 datum <- as.Date(per_string, format='%Y%m%d')
+
+## For PML Szenario without date in filename
+datum <- as.Date("21000101", format='%Y%m%d')
 
 ## Konvertiere die Daten aus dem GeoTiff in einen 2-dimensionalen Array
 ## --> POH und Meshs-Werte
@@ -242,13 +250,13 @@ df_estimates <- data.frame(lower_loss = sum(newdat$estimated_loss_ll),
                        best_estimate_caims = sum(newdat$estimated_claims),
                        upper_claims = sum(newdat$estimated_claims_ul))
 
-## Schadenschaetzung ausgeben:
-message(print(paste0('HASAR - Der geschätzte Schaden beträgt: ',
-                     round(df_estimates$best_estimate_loss/1e6, 1), ' Mio. CHF bei rund ',
-                     format(round(df_estimates$best_estimate_caims), big.mark = "'"),' Schäden.')))
-message(print(paste0('HASAR - Der geschätzte Schaden liegt zwischen: ',
-                     round(df_estimates$lower_loss/1e6, 1), ' Mio CHF und ',
-                     round(df_estimates$upper_loss/1e6, 1), ' Mio CHF')))
+# ## Schadenschaetzung ausgeben:
+# message(print(paste0('HASAR - Der geschätzte Schaden beträgt: ',
+#                      round(df_estimates$best_estimate_loss/1e6, 1), ' Mio. CHF bei rund ',
+#                      format(round(df_estimates$best_estimate_caims), big.mark = "'"),' Schäden.')))
+# message(print(paste0('HASAR - Der geschätzte Schaden liegt zwischen: ',
+#                      round(df_estimates$lower_loss/1e6, 1), ' Mio CHF und ',
+#                      round(df_estimates$upper_loss/1e6, 1), ' Mio CHF')))
 
 ## ----
 ##  3. PDF KARTEN ERSTELLEN:
@@ -968,16 +976,27 @@ df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
 # kat_2 <- 6e-2
 # kat_3 <- 8e-2
 
-## 2. Quelle: Nach Böhringer AG und Schadenschätzung vom 01.12.2021 von MHE
-## (Schadenabschaetzung_Hagel_20120701.xlsx)
-kat_1 <- 5e-2
-kat_2 <- 10e-2
-kat_3 <- 20e-2
+# ## 2. Quelle: Nach Böhringer AG und Schadenschätzung vom 01.12.2021 von MHE
+# ## (Schadenabschaetzung_Hagel_20120701.xlsx)
+# kat_1 <- 5e-2
+# kat_2 <- 10e-2
+# kat_3 <- 20e-2
+# 
+# ## Durchschnittsschaden ohne Nuller
+# ## Quelle: Elementarschaden Analyse von MHE vom April 2021
+# ## (202204_Analysis_NatHazard_Claims.xlsx)
+# schad_mean <- 6e3
 
+## Extrem Ereignisse - PML Betrachtungen
+## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
+## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
+kat_1 <- 35e-2
+kat_2 <- 35e-2
+kat_3 <- 35e-2
 ## Durchschnittsschaden ohne Nuller
-## Quelle: Elementarschaden Analyse von MHE vom April 2021
-## (202204_Analysis_NatHazard_Claims.xlsx)
-schad_mean <- 6e3
+## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
+schad_mean <- 20e3
+
 
 # schad <- read.csv2('./Rdata/hagelschad.170802.csv', stringsAsFactors = FALSE)
 # 

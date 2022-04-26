@@ -1,11 +1,8 @@
 ---
-title: "Hasar - Hagelschadenschaetzung anhand Radardaten"
+title: "HasaR - Hagelschadenschaetzung anhand Radardaten"
 author: "Mirco Heidemann"
 date: "Februar 2018"
 output:
-  html_notebook: default
-  html_document:
-    df_print: paged
   pdf_document: default
 ---
 
@@ -37,21 +34,13 @@ Funktionen laden
 ```{r eval = FALSE, warning = FALSE}
 # setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
-# pth_data <- ("./data/")
-# pth_tbl <- ("./data/tables/")
-# pth_func <- ("./data/rfunctions/")
-# pth_pres <- ("./presentation/")
-# pth_tif <- ("./data/radarTiffs/")
-# pth_rdata <- ("./data/rdata/")
-# pth_shp <- ("./data/shapes/")
-
-pth_data <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/")
-pth_tbl <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/tables/")
-pth_func <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/rfunctions/")
-pth_pres <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/presentation/")
-pth_tif <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/radarTiffs/")
-pth_rdata <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/rdata/")
-pth_shp <- ("C:/Users/mheidemann/Documents/Data_Science/HasaR/data/shapes/")
+pth_data <- ("Data/")
+pth_tbl <- ("Data/tables/")
+pth_func <- ("Data/rfunctions/")
+pth_pres <- ("Output/")
+pth_tif <- ("Data/radarTiffs/")
+pth_rdata <- ("Data/rdata/")
+pth_shp <- ("Data/shapes/")
 
 ## Funktionen und Packages laden
 library(dplyr)
@@ -859,7 +848,7 @@ mCombi
 ```
 
 #### Schadenschaetzung nach der INTERPOL Methode
-Die INTERPOL Methode rechnet mit empirischen Betroffenheitsgraden je Baujahrskategorie und einem Durchschnittsschaden von CHF 5'000. Die Hagelkorngroesse wird dabei nicht beruecksichtigt. Jedem Gebaeude wird anhand des Radarbildes eine Hagelwahrscheinlichkeit zugeordnet (interpoliert). Die Gebaeude mit einer POH von mindestens 80% werden selektiert und je nach Baujahrskategorie unterschiedliche Betroffenheitsgrade angewandt. Betroffenheitsgrad mal die Anzahl selektierter Gebaeude pro Baujahrskategorie ergibt die Anzahl betroffener Gebaeude pro Baujahrskategorie.  
+Die INTERPOL Methode rechnet mit empirischen Betroffenheitsgraden je Baujahrskategorie und einem Durchschnittsschaden von CHF 6'000. Die Hagelkorngroesse wird dabei nicht beruecksichtigt. Jedem Gebaeude wird anhand des Radarbildes eine Hagelwahrscheinlichkeit zugeordnet (interpoliert). Die Gebaeude mit einer POH von mindestens 80% werden selektiert und je nach Baujahrskategorie unterschiedliche Betroffenheitsgrade angewandt. Betroffenheitsgrad mal die Anzahl selektierter Gebaeude pro Baujahrskategorie ergibt die Anzahl betroffener Gebaeude pro Baujahrskategorie.  
 
 Betroffenheitsgrade:
 
@@ -869,6 +858,33 @@ Betroffenheitsgrade:
 
 Quelle fuer die Betroffenheitsgrade und Durchschnittsschaden:
 *analyse.hagelevents.xlsx, MHE, Nov 2017*
+
+# ## statistische Kennzahl
+# ## 1. Quelle: analyse.hagelevents.xlsx, Nov 2017, MHE
+# kat_1 <- 3e-2
+# kat_2 <- 6e-2
+# kat_3 <- 8e-2
+
+# ## 2. Quelle: Nach Böhringer AG und Schadenschätzung vom 01.12.2021 von MHE
+# ## (Schadenabschaetzung_Hagel_20120701.xlsx)
+# kat_1 <- 5e-2
+# kat_2 <- 10e-2
+# kat_3 <- 20e-2
+# 
+# ## Durchschnittsschaden ohne Nuller
+# ## Quelle: Elementarschaden Analyse von MHE vom April 2021
+# ## (202204_Analysis_NatHazard_Claims.xlsx)
+# schad_mean <- 6e3
+
+## Extrem Ereignisse - PML Betrachtungen
+## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
+## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
+kat_1 <- 35e-2
+kat_2 <- 35e-2
+kat_3 <- 35e-2
+## Durchschnittsschaden ohne Nuller
+## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
+schad_mean <- 20e3
 
 ```{r warning = FALSE}
 library(fields) ## interp.surface
@@ -899,12 +915,32 @@ df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
 # df_interpol$meshsInterpol <- format(df_interpol$meshsInterpol, scientific = FALSE)
 # write.csv2(df_interpol, 'testInterpol3.csv', row.names = F)
 
-## statistische Kennzahl
-## Quelle: analyse.hagelevents.xlsx, Nov 2017, MHE
-schad_mean <- 5e3
-kat_1 <- 3e-2
-kat_2 <- 6e-2
-kat_3 <- 8e-2
+# ## statistische Kennzahl
+# ## 1. Quelle: analyse.hagelevents.xlsx, Nov 2017, MHE
+# kat_1 <- 3e-2
+# kat_2 <- 6e-2
+# kat_3 <- 8e-2
+
+## 2. Quelle: Nach Böhringer AG und Schadenschätzung vom 01.12.2021 von MHE
+## (Schadenabschaetzung_Hagel_20120701.xlsx)
+kat_1 <- 5e-2
+kat_2 <- 10e-2
+kat_3 <- 20e-2
+
+## Durchschnittsschaden ohne Nuller
+## Quelle: Elementarschaden Analyse von MHE vom April 2021
+## (202204_Analysis_NatHazard_Claims.xlsx)
+schad_mean <- 6e3
+
+# ## Extrem Ereignisse - PML Betrachtungen
+# ## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
+# ## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
+# kat_1 <- 35e-2
+# kat_2 <- 35e-2
+# kat_3 <- 35e-2
+# ## Durchschnittsschaden ohne Nuller
+# ## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
+# schad_mean <- 20e3
 
 # schad <- read.csv2('./Rdata/hagelschad.170802.csv', stringsAsFactors = FALSE)
 # 
