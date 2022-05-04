@@ -990,9 +990,9 @@ df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
 ## Extrem Ereignisse - PML Betrachtungen
 ## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
 ## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
-kat_1 <- 35e-2
-kat_2 <- 35e-2
-kat_3 <- 35e-2
+kat_1 <- 33e-2
+kat_2 <- 33e-2
+kat_3 <- 33e-2
 ## Durchschnittsschaden ohne Nuller
 ## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
 schad_mean <- 20e3
