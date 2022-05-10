@@ -8,20 +8,20 @@ output:
 
 Statistische Modellierung von Hagelschaeden anhand Radardate fuer Ereignisse mit ueber 1'000 Schadenmeldungen.
 
-* Gegitterte GemDat Daten laden
-    + Anzahl Gebaeude und Versicherungssumme pro 1km^2 Gitter des Meteoschweiz Radars
-    + Fuer eine Aktuallisierung des GVZ Portfolios, erst das R-Skript "Aggregate.GemDat.MeteoSwiss.Grid.R" ausfuehren
-* Schaetzung der Schadensumme mit dem statistischen Modell
-    + Eine **logistische Regression** schaetzt die Wahrscheinlichkeit fuer einen Schadenseintritt, die erwartete Schadenssumme pro Gitterzellen wird mit einem **GLM mit Gamma Verteilung** modelliert
-    + Es werden nur Gitterzellen mit mindestens einem Gebaeude und einer POH von mindestens 80% betrachtet
-* PDF - Karten erstellen
-    + MESHS (Maximale Korngroesse am Boden) der MeteoSchweiz
-    + POH (Hagelwahrscheinlichkeit) der MeteoSchweiz
-    + Geschaetzte Schadensumme pro Gitter und Gemeinde
-    + Geschaetzte Anzahl Schaeden pro Gemeinde
-    + Leaflet - Karte mit MESHS und Schadensumme pro Gitter
-* Schaetzung der Schadensumme nach der INTERPOL Methode
-    + Empirischen Betroffenheitsgraden je Baujahrskategorie und einem Durchschnittsschaden von CHF 5'000.  
+1. Gegitterte GemDat Daten laden
+- Anzahl Gebaeude und Versicherungssumme pro 1km^2 Gitter des Meteoschweiz Radars
+- Fuer eine Aktuallisierung des GVZ Portfolios, erst das R-Skript "Aggregate.GemDat.MeteoSwiss.Grid.R" ausfuehren
+2. Schaetzung der Schadensumme mit dem statistischen Modell
+- Eine **logistische Regression** schaetzt die Wahrscheinlichkeit fuer einen Schadenseintritt, die erwartete Schadenssumme pro Gitterzellen wird mit einem **GLM mit Gamma Verteilung** modelliert
+- Es werden nur Gitterzellen mit mindestens einem Gebaeude und einer POH von mindestens 80% betrachtet
+3. PDF - Karten erstellen
+- MESHS (Maximale Korngroesse am Boden) der MeteoSchweiz
+- POH (Hagelwahrscheinlichkeit) der MeteoSchweiz
+- Geschaetzte Schadensumme pro Gitter und Gemeinde
+- (Geschaetzte Anzahl Schaeden pro Gemeinde)
+- Leaflet - Karte mit MESHS und Schadensumme pro Gitter
+4. Schaetzung der Schadensumme nach der INTERPOL Methode
+- Empirischen Betroffenheitsgraden je Baujahrskategorie und einem Durchschnittsschaden von CHF 6'000.  
 
 Version: HasaR 3.0
 ---
@@ -1021,9 +1021,9 @@ schad_mean <- 6e3
 # ## Extrem Ereignisse - PML Betrachtungen
 # ## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
 # ## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
-# kat_1 <- 33e-2
-# kat_2 <- 33e-2
-# kat_3 <- 335e-2
+# kat_1 <- 1/3
+# kat_2 <- 1/3
+# kat_3 <- 1/3
 # ## Durchschnittsschaden ohne Nuller
 # ## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
 # schad_mean <- 20e3

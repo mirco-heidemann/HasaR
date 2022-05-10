@@ -932,10 +932,10 @@ mCombi <- leaflet() %>%
     options = layersControlOptions(collapsed = F)
   ) 
 
-## Save a html leatlet map
-library(htmlwidgets)
-f <- paste0(gsub("/", "\\", pth_pres, fixed = TRUE), "hagelereignis_", per_string, ".html")
-saveWidget(mCombi, file.path(normalizePath(dirname(f)), basename(f)))
+# ## Save a html leatlet map
+# library(htmlwidgets)
+# f <- paste0(gsub("/", "\\", pth_pres, fixed = TRUE), "hagelereignis_", per_string, ".html")
+# saveWidget(mCombi, file.path(normalizePath(dirname(f)), basename(f)))
 
 # mCombi
 
@@ -990,9 +990,9 @@ df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
 ## Extrem Ereignisse - PML Betrachtungen
 ## Anhaltspunk: Szenarien für den IRV von 2018 von MHE
 ## (Hagelszenario_unter_GSG_IRV.2017.xlsx)
-kat_1 <- 33e-2
-kat_2 <- 33e-2
-kat_3 <- 33e-2
+kat_1 <- 1/3
+kat_2 <- 1/3
+kat_3 <- 1/3
 ## Durchschnittsschaden ohne Nuller
 ## Quelle: Gebäudeversicherung Kanton Luzern, Ereignis vom 28.06.2021
 schad_mean <- 20e3
