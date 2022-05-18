@@ -28,7 +28,7 @@ Version: HasaR 4.0
 
 ```{r}
 ## HIER DAS DATUM DES RADARBILDS ANGEBEN
-eventDat <- '01.08.2017'
+eventDat <- '01.07.2012'
 ```
 
 **Funktionen und Packages laden**
@@ -937,42 +937,48 @@ mCombi <- leaflet() %>%
 # mCombi
 ```
 
-#### Schadenschaetzung nach der INTERPOL Methode
+#### Schadenschaetzung nach der Impact Methode (Haimo)
 Die IMPACT Methode rechnet mit empirischen Betroffenheits- und Schadengraden. Jedem Gebaeude wird anhand des Radarbildes eine Hagelwahrscheinlichkeit zugeordnet. Für die Gebäude mit einer POH von mindestens 80% werden über die Impact Funktion einen Schaden gerechnet. Die Impact Funktion setzt sich zusammen aus Betroffenheits- und Schadengrad (PAA und MDD zu MDR).
-Die Impact Funktion leitet sich aus Analysen vergangener Hagelereignisse ab, welche bei der Entwicklung von Haimo sowie im scClim Projekt durchgeführt wurden.
+Die Impact Funktion leitet sich aus Analysen vergangener Hagelereignisse ab, welche bei der Entwicklung von Haimo durchgeführt wurden.
 
-*Hail Impact Function GVZ:*
-
+*Lineare Hail Impact Function GVZ:*
 Meshsclass | MESHS [cm] | Impact     |
 ---------- | ---------- | ---------- |
-0          | 1.5        | 0.00000031 |
-1          | 2          | 0.0000033  |
-2          | 2.5        | 0.0000092  |
-3          | 3          | 0.000018   |
-4          | 3.5        | 0.000030   |
-5          | 4          | 0.000044   |
-6          | 4.5        | 0.000061   |
-7          | 5          | 0.000082   |
+0          | 1.5        | 0.000001   |
+1          | 2          | 0.0000905  |
+2          | 2.5        | 0.0000933  |
+3          | 3          | 0.0000962  |
+4          | 3.5        | 0.000099   |
+5          | 4          | 0.000102   |
+6          | 4.5        | 0.000105   |
+7          | 5          | 0.000108   |
 8          | 5.5        | 0.00011    |
 9          | 6          | 0.00013    |
 10         | 6.5        | 0.00016    |
 
+*Constant Hail Impact Function GVZ:*
+0.000146 for all MESHS Value
 
 ```{r warning = FALSE}
-
-## Hail Impact Function
-tbl_impfct <- data.frame(meshs = seq(from=1.5, to=6.5, by=0.5),
-                         impact = c(3.1e-07,
-                                    3.3e-06,
-                                    9.2e-06,
-                                    1.8e-05,
-                                    3e-05,
-                                    4.4e-05,
-                                    6.1e-05,
-                                    8.2e-05,
+## Lineare Impact Function von Haimo
+tbl_impfct_lin <- data.frame(meshs_class = seq(from=0, to=10, by=1),
+                         meshs = seq(from=1.5, to=6.5, by=0.5),
+                         impact = c(0.000001,
+                                    0.0000905,
+                                    0.0000933,
+                                    0.0000962,
+                                    0.000099,
+                                    0.000102,
+                                    0.000105,
+                                    0.000108,
                                     0.00011,
-                                    0.00013,
-                                    0.00016))
+                                    0.000113,
+                                    0.000116))
+
+## Konstante Impact Function von Haimo
+tbl_impfct_lin <- data.frame(meshs_class = seq(from=0, to=10, by=1),
+                         meshs = seq(from=1.5, to=6.5, by=0.5),
+                         impact = rep(0.000146, times = 11))
 
 ## definieren das Objekt mit den Radar-Daten fuer interp.surface
 loc_obj <- cbind(gemdat$geox, gemdat$geoy)
@@ -984,20 +990,17 @@ grid_obj_meshs <- list(x = xs,
                      z = meshs_array)
 
 df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
-                                        zweckcode, gebBaujahr, volumen, geox, geoy) %>% 
+                                        zweckcode, gebBaujahr, volumen,
+                                        geox, geoy) %>% 
   ## interpolation der poh und meshs werte auf die gebaeude
   mutate(poh = round(interp.surface(grid_obj_poh, loc_obj),1) *10,
-         meshs = round(interp.surface(grid_obj_meshs, loc_obj),1)) %>%
+         meshs_class = round(interp.surface(grid_obj_meshs, loc_obj))) %>%
   ## nur Gebäude mit mindestens poh 80%
-  filter(poh >= 80)
+  filter(poh >= 80) %>% 
+  left_join(tbl_impfct_lin, by = 'meshs_class') %>% 
+  mutate(schaden_impact = versSum * impact)
 
-## left_join(tbl_impfct, by = c('meshs' = 'meshs'))
-
-tbl_out <- data.frame("BaujahrKat" = c("Baujahr bis 1960",
-                                      "Baujahr zwischen 1960 und 2002",
-                                      "Baujahr ab 2002"),
-                     "AnzahlSchad_ohne_0er" = as.integer(t(tbl[1:3])),
-                     "Schadensumme" = as.integer(t(tbl[4:6])))
+sum(df_interpol$schaden_impact)
 ```
 
 ## Resultate zusammenfassen und in einem CSV ausgeben
@@ -1007,7 +1010,7 @@ df_out <- tribble(
   "HASAR_LOWCONF", df_estimates$lower_loss, round(df_estimates$lower_claims),
   "HASAR_ESTIM", df_estimates$best_estimate_loss, round(df_estimates$best_estimate_claims),
   "HASAR_UPCONF", df_estimates$upper_loss, round(df_estimates$upper_claims),
-  "INTERPOL", tbl$schad_hagel, tbl$anzahl_hagel)
+  "Impact", sum(df_interpol$schaden_impact), NA)
 
 # write a estimated loss csv file
 name_str <- paste0(pth_pres, "Schadenschätzung_Hagelereignis_", as.Date(eventDat, "%d.%m.%Y"), ".csv")
@@ -1022,7 +1025,7 @@ Schadenschätzungen ausgeben
 ```{r}
 cat("---\n")
 cat("Schadenschätzung nach HasaR:\n")
-cat(paste0('- Schadenschätzung für das Hagelereignis vom ', eventDat, ': CHF ',
+cat(paste0('- Hagelereignis vom ', eventDat, ': CHF ',
            round(df_estimates$best_estimate_loss/1e6, 1), ' Mio. bei rund ',
            format(round(df_estimates$best_estimate_claims), big.mark = "'"),
            ' vergüteten Schäden.'))
@@ -1032,12 +1035,9 @@ cat(paste0('- Mit einer Wahrscheinlichkeit von 95% liegt der Schaden zwischen: C
            round(df_estimates$upper_loss/1e6, 1), ' Mio.'))
 cat("\n")
 cat("\n---\n")
-cat("Schadenschätzung nach INTERPOL:\n")
-cat(paste0('- Schadenschätzung für das Hagelereignis vom ',
-           eventDat, ': CHF ',
-           format(tbl$schad_hagel/1e6, big.mark="'"), ' Mio. bei rund ',
-           format(round(sum(tbl_out$AnzahlSchad_ohne_0er)), big.mark = "'"),
-           ' vergüteten Schäden.'))
+cat("Schadenschätzung nach Impact Methode:\n")
+cat(paste0('- Hagelereignis vom ', eventDat, ': CHF ',
+           format(sum(df_interpol$schaden_impact)/1e6, big.mark="'"), ' Mio.'))
 cat("\n---")
 ```
 
