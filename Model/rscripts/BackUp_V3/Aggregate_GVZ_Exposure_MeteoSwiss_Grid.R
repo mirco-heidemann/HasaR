@@ -12,6 +12,7 @@
 library(rgdal)
 library(tidyverse)
 library(here)
+library(sf)
 
 pth_data <- here("Data/")
 pth_tbl <- here("Data/tables/")
@@ -25,9 +26,13 @@ pth_shp <- here("Data/shapes/")
 ## (Versicherungssumme und Koordianten)
 portfolio_file <- 'GVZ_Exposure_202201.csv'
 
+## Die MeteoSchweiz Radar Tiffs sind noch in der alten Landesvermessung LV03 -
+## Bezugssystem CH1903 - codiert!!
+## Die Exposure Daten werden deshalb vom Bezugssystem CH1903+ in der 
+## Landesvermessung LV95 in das alte Bezugssystem CH1903 transformiert.
+
 ## Gebaeude-Daten lesen
-input_csv <- paste0(pth_tbl, portfolio_file)
-#df_exp <- read.csv2(input_csv, stringsAsFactors = FALSE, sep = ',')
+input_csv <- here(pth_tbl, portfolio_file)
 
 df_exp <- read_delim(input_csv, delim = ";",
                   locale = locale(encoding = 'UTF-8',
@@ -43,22 +48,38 @@ df_exp <- read_delim(input_csv, delim = ";",
                   ) %>%
   ## Wenn keine Koordinaten, raus...
   filter(!is.na(KoordinateNord)) %>%
-  mutate(versSum = Versicherungssumme,
-         geox = KoordinateOst,
-         geoy = KoordinateNord) %>% 
-  dplyr::select(-c(Versicherungssumme, KoordinateNord, KoordinateOst))
+  rename(versSum = Versicherungssumme)
+
+## Coord transform with the sf-package:
+## ---
+
+## First define coord.system, ...
+df_point_exp <- df_exp %>%
+  st_as_sf(coords = c("KoordinateOst", "KoordinateNord"), crs = 2056)
+## ... then transform into the LV03 coordinat system
+df_exp_lv03 <- st_transform(df_point_exp, 21781)
+
+## Write point geometry coords in separate columns
+df_exp_lv03 <- df_exp_lv03 %>%
+  mutate(geox = unlist(map(df_exp_lv03$geometry,1)),
+         geoy = unlist(map(df_exp_lv03$geometry,2)))
+
+## Convert geo feature tibble into data frame
+df_exp_lv03 <- data.frame(df_exp_lv03) %>% 
+  dplyr::select(-geometry)
   
-# summary(df_exp)
+# summary(df_exp_lv03)
+## ---
 
 ## Ein GeoTiff lesen fuer das Gitter
 #poh <- readGDAL(paste0(pth_tif, 'poh.20120701.tif'))
-poh <- readGDAL(paste0(pth_tif, 'poh.20210628.tif'))
+poh <- readGDAL(here(pth_tif, 'poh.20210628.tif'))
 
 ## ----
 ##  1. GVZ EXPOSURE AUF RADARGITTER AGGREGIEREN
 ## ----
 ## shapes fuer plots einlesen
-sh.gemeinde <- readOGR(paste0(pth_shp, 'gemeinden.2016.shp'),
+sh.gemeinde <- readOGR(here(pth_shp, 'gemeinden.2016.shp'),
                        layer = 'gemeinden.2016')
 
 ## definieren Vektoren fuer x- und y-Koordinaten
@@ -80,20 +101,20 @@ y.min.zh <- sh.gemeinde@bbox[2]
 x.max.zh <- sh.gemeinde@bbox[3]
 y.max.zh <- sh.gemeinde@bbox[4]
 
-ind <- which(df_exp$geox >= x.min.zh & df_exp$geox <= x.max.zh)
+ind <- which(df_exp_lv03$geox >= x.min.zh & df_exp_lv03$geox <= x.max.zh)
 if (length(ind) > 0) {
-  df_exp <- df_exp[ind,]
+  df_exp_lv03 <- df_exp_lv03[ind,]
 }
-ind <- which(df_exp$geoy >= y.min.zh & df_exp$geoy <= y.max.zh)
+ind <- which(df_exp_lv03$geoy >= y.min.zh & df_exp_lv03$geoy <= y.max.zh)
 if (length(ind) > 0) {
-  df_exp <- df_exp[ind,]
+  df_exp_lv03 <- df_exp_lv03[ind,]
 }
 
 ## Das Gitter vom Radar auf den Bereich vom Knt ZH begrenzen.
-ind.x <- which(xs >= (min(df_exp$geox) - x.cellsize) &
-                 xs <= (max(df_exp$geox) + x.cellsize))
-ind.y <- which(ys >= (min(df_exp$geoy) - y.cellsize) &
-                 ys <= (max(df_exp$geoy) + y.cellsize))
+ind.x <- which(xs >= (min(df_exp_lv03$geox) - x.cellsize) &
+                 xs <= (max(df_exp_lv03$geox) + x.cellsize))
+ind.y <- which(ys >= (min(df_exp_lv03$geoy) - y.cellsize) &
+                 ys <= (max(df_exp_lv03$geoy) + y.cellsize))
 if (length(ind.x) > 0 & length(ind.y) > 0) {
   xs <- xs[ind.x]
   ys <- ys[ind.y]
@@ -107,13 +128,13 @@ Anzahl <- VersSumme <- x.coord <- y.coord <- array(dim = c(length(xs),
 ## Schleife ueber Gitterzellen
 for (i in 1:length(xs)) {
   for (j in 1:length(ys)) {
-    ind <- which(df_exp$geox > (xs[i] - x.cellsize / 2) &
-                   df_exp$geox <= (xs[i] + x.cellsize / 2) &
-                   df_exp$geoy > (ys[j] - y.cellsize / 2) &
-                   df_exp$geoy <= (ys[j] + y.cellsize / 2))
+    ind <- which(df_exp_lv03$geox > (xs[i] - x.cellsize / 2) &
+                   df_exp_lv03$geox <= (xs[i] + x.cellsize / 2) &
+                   df_exp_lv03$geoy > (ys[j] - y.cellsize / 2) &
+                   df_exp_lv03$geoy <= (ys[j] + y.cellsize / 2))
     if (length(ind) > 0) {
       Anzahl[i,j] <- length(ind)
-      VersSumme[i,j] <- sum(df_exp$versSum[ind])
+      VersSumme[i,j] <- sum(df_exp_lv03$versSum[ind])
       x.coord[i,j] <- xs[i]
       y.coord[i,j] <- ys[j]
     }
@@ -124,10 +145,10 @@ for (i in 1:length(xs)) {
 image(Anzahl)
 
 ## Datum aus dem Geb. Daten File extrahieren
-per_char <- unlist(strsplit(gsub("([0-9]+).*$", "\\1", input_csv),'\\.'))[3]
-# out_file_char <- paste0('GemdatGitter.',per_char,'.Rdata')
-out_file_char <- 'GemdatGitter.Rdata'
+per_char <- str_extract(input_csv, "[[:digit:]]+")
+out_file_char <- paste0('GemdatGitter_',per_char,'.Rdata')
+
 # save(xs, ys, ind.x, ind.y, x.coord, y.coord, Anzahl,
-#      VersSumme, gemdat, per_char,
-#      file = paste0(pth_rdata, out_file_char))
+#      VersSumme, df_exp_lv03, per_char,
+#      file = here(pth_rdata, out_file_char))
 

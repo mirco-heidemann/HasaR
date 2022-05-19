@@ -1,0 +1,98 @@
+---
+title: "Select Hail Events - GVZ Loss Data"
+author: "Mirco Heidemann"
+date: "19 5 2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(sf)
+
+path_data <- here("Model/data/")
+path_tbl <- here("Model/tables")
+
+```
+
+*Select Hailevents*
+Select hail events from GemDat/Rubin Database, relevant from a GVZ perspective. Let's define a hail loss event if there are at least 800 claims reported.
+Index the loss data:
+loss_index = index_2021 / index_jahr_i * schad_geschaetzt_jahr_i
+
+```{r import}
+file_name <- here(path_data, "GVZ_Hail_Loss_200001_to_202203.csv")
+
+df_data <- read_delim(file_name, delim = ';',
+                      show_col_types = FALSE) %>% 
+  mutate(schad_index = round(max(Index) / Index * Schadensumme))
+```
+
+Generate table per relevant hail events, sort in descending order according the number of reported claims
+```{r tabel}
+tbl_events <- df_data %>% 
+  dplyr::select(Schadendatum, schad_index) %>% 
+  mutate(Schadendatum = as.Date(Schadendatum, "%d%m%Y")) %>% 
+  group_by(Schadendatum) %>% 
+  summarise(loss_index = round(sum(schad_index)),
+            reported_claims = n()) %>% 
+  #filter(reported_claims > 999) %>% 
+  filter(reported_claims > 799) %>% 
+  arrange(desc(Schadendatum))
+
+# tbl_events
+```
+Now we have our hail events!
+
+Remarks:
+- 01. & 02.08.2017 counts as two events
+- 12. & 13.07.2021 counts as one event: Put claims from 12.07. to the 13.07.2021 event
+- We only have radar date from 2004 on
+
+Generate one CSV Table per each event (put claims from 12.07. to the 13.07.2021 event) but first, do some data wranling:
+- Exclude zero losses
+- Transform Coordinate from LV95 to LV03 (MeteoSwiss codes radar images in old LV03!)
+
+```{r}
+## Coord transform with the sf-package:
+## ---
+
+## First define coord.system, ...
+df_point <- df_data %>%
+  st_as_sf(coords = c("KoordinateOst", "KoordinateNord"), crs = 2056)
+## ... then transform into the LV03 coordinat system
+df_lv03 <- st_transform(df_point, 21781)
+
+## Write point geometry coords in separate columns
+df_lv03 <- df_lv03 %>%
+  mutate(geox = unlist(map(df_lv03$geometry,1)),
+         geoy = unlist(map(df_lv03$geometry,2)))
+
+## Convert geo feature tibble into data frame
+df_lv03 <- data.frame(df_lv03) %>% 
+  dplyr::select(-geometry) %>% 
+  filter(schad_index > 0) %>% 
+  mutate(Schadendatum = as.Date(Schadendatum, "%d%m%Y"))
+
+# summary(df_lv03)
+## ---
+```
+
+Generate one CSV Table per each event (put claims from 12.07. to the 13.07.2021 event).
+```{r}
+## TO DO FOR LOOP
+tbl_event_selected <- tbl_events %>% 
+  filter(Schadendatum > as.Date("01012004", "%d%m%Y"))
+
+df_event <- df_lv03 %>% 
+  filter(Schadendatum == tbl_event_selected$Schadendatum[1])
+
+out_file <- paste0("Eventloss_", format(tbl_event_selected$Schadendatum[1], "%Y%m%d"), ".csv")
+  
+write_excel_csv(df_event, here(path_tbl, out_file), delim = ";")
+
+cat("\n\n")
+cat("csv-file saved:", here(path_tbl, out_file))
+```

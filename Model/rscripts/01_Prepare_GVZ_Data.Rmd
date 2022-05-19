@@ -1,0 +1,284 @@
+---
+title: "Prepare GVZ Data for HasaR"
+subtitle: "Exposure and Hail Loss Data"
+author: "Mirco Heidemann"
+date: "05/2022"
+output: pdf_document
+---
+Prepare the up to date GVZ exposure and hail loss data from 01.01.2000 to now.
+
+Anmerkungen zu den Daten:
+- Das Exposure beinhaltet den gesamten Bestand der bei der GVZ versicherten Geb?ude - also fast alle Geb?ude im Kanton Z?rich. Manche Bundesbauten, wie beispielsweise das Landesmuseum oder auch die ETH Geb?ude geh?ren nicht dazu. Bauprojekte welche noch nicht fertig umgesetzt sind und von der GVZ gesch?tzt wurden geh?ren auch nicht dazu.
+- Stand f?r die Exposure Daten ist der 01.01.2022.
+
+- Die Schadendaten umfassen alle, bei der GVZ gemeldeten Hagelsch?den im Zeitraum vom 01.01.2000 bis 15.03.2022. 
+- Die Schadendaten umfassen somit auch Sch?den mit Schadensumme 0 (abgelehnt, unter Selbstbehalt, nicht bei der GVZ versichert, usw.).
+- Die Schadensummen gelten f?r den gesamten Schadenbetrag, einschliesslich des Selbstbehalts (Ground Up Loss).
+- Die Schadendaten sind konsistent mit den Exposure Daten. D.h. die Sch?den beziehen sich auf die Geb?ude welche zum 01.01.2022 versichert sind, respektive f?r welche eine Police vorliegt. Sch?den an Geb?uden welche unterdessen abgebrochen sind, sind in den Schadendaten NICHT enthalten. F?r diese Geb?ude - in unserem Fall rund 1'600 Sch?den, respektive 2 % vom gesamten Schadenbestand ?ber die gesamte Zeitspanne - liegen uns keine Koordinaten vor.
+
+**Attribute for exposure data:**
+- VersicherungsID
+- Versicherungssumme
+- Volumen
+- Baujahr
+- Nutzung
+- Nutzungscode
+- KoordinateNord
+- KoordinateOst
+- Adresse
+
+**Attribute for loss data:**
+- VersicherungsID
+- Versicherungssumme
+- Volumen
+- Baujahr
+- Nutzung
+- Nutzungscode
+- KoordinateNord
+- KoordinateOst
+- Adresse
+
+- Schadennummer
+- Schadendatum
+- Schadensumme
+
+- Index
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(here)
+
+## Setup paths
+path_data <- here("Data/tables")
+path_output <- here("Model/data")
+
+file_name_exp <- here(path_data, "GVZ_Portfolio_Stand_20220101.csv")
+file_name_loss <- here(path_data, "GemDat_Schaden_Export_Ng_20220315.csv")
+index_gvz <- here(path_data, "Versicherungsindex_GVZ.csv")
+```
+
+Read **exposure** into a data frame. Where "Versicherungssumme" equals zero, volumen and coordinates are "NULL", the building is "fremdversichert", meaning there is no police at gvz. Remove those buildings.
+
+Read **loss** into data frames. Read only loss attributes and take police data via joining the exposure data. This means, we have loss data that correspond with the actual exposure from 01.01.2022! The loss data of demolished buildings, however, are lost.
+
+Read GVZ-Index for indexing losses and portfolio from 2019 for the coordinates.
+```{r}
+# Read exposure data
+df_orig_exp <- read_delim(file_name_exp, delim = ";")
+```
+problems()--> Empty Baujahr values
+
+```{r}
+# Read loss data
+df_orig_loss <- read_delim(file_name_loss, delim = ";",
+                           # locale = locale(grouping_mark = "'"),
+                           col_select = c(2, 4:6, 9))
+```
+
+```{r}
+# Read "GVZ Versicherungs Index"
+df_index <- read_delim(index_gvz, delim = ";",
+                       col_select = c(1,3)) %>% 
+  mutate(Jahr = format(as.Date(Jahr, "%d.%m.%Y"), "%Y")) %>% 
+  rename(Index = `Versicherungsindex GVZ`)
+```
+
+Data wrangling: Rename, re-shape, join gvz-index and coordinates, filter non-Na's, only hail losses, ...
+Modify wrong reported Baujahr as follows:
+- Beyond 2022: Set to 2022
+- Na: Set to median
+
+```{r}
+# Wrangling exposure data
+df_exp <- df_orig_exp %>% 
+  filter(Versicherungssumme != 0) %>% 
+  mutate(Volumen = as.integer(Volumen),
+         Baujahr = ifelse(Baujahr > 2022, 2022, Baujahr),
+         Baujahr = ifelse(is.na(Baujahr), median(Baujahr, na.rm = TRUE), Baujahr),
+         KoordinateNord = as.numeric(KoordinateNord),
+         KoordinateOst = as.numeric(KoordinateOst)) %>% 
+  filter(!is.na(KoordinateNord))
+
+# Wrangling loss data
+df_loss <- df_orig_loss %>% 
+  rename(Schadenursache = ClaimCausationDetail,
+         Schadennummer = ObjectClaimNumber,
+         Schadendatum = ClaimIncidentDate,
+         Schadensumme = ClaimSumBuilding,
+         GebNr = BuildingAssuranceNumberCant) %>% 
+  mutate(Schadendatum = as.Date(Schadendatum, "%d.%m.%Y"),
+         Schadenjahr = format(Schadendatum, "%Y")) %>%
+  filter(Schadenursache == "211 Hagel",
+         Schadendatum >= as.Date(format("01.01.2000"), "%d.%m.%Y")) %>% 
+  left_join(df_index, by = c("Schadenjahr" = "Jahr"))
+
+## Merging loss to exposure data
+df_loss_complete <- df_exp %>% 
+  ## !! Remember: Loss data without exposure - demolished buildings - are lost
+  inner_join(df_loss, by = c("VersicherungsID" = "GebNr")) %>% 
+  mutate(Schadendatum = format(Schadendatum, "%d%m%Y")) %>% 
+  dplyr::select(-c(Schadenjahr, Schadenursache))
+
+# Checking exposure data frames
+cat("\n\n")
+cat("EXPOSURE DATA\n------------\n")
+summary(df_exp)
+cat("\n")
+# Check NA's or empty Coordinates
+cat(paste("Total number of rows in exposure:", dim(df_exp)[1]),"\n")
+cat(paste("Total number with coordinates in exposure:", length(which(!is.na(df_exp$KoordinateNord)))), "\n")
+cat(paste("Difference:", dim(df_exp)[1] - length(which(!is.na(df_exp$KoordinateNord)))), "\n")
+cat("\n")
+
+# Checking loss data frames
+cat("LOSS DATA\n------------\n")
+summary(df_loss_complete)
+cat("\n")
+cat(paste("Total number of rows in loss data:", dim(df_loss_complete)[1]),"\n")
+cat(paste("Total number with coordinates in in loss data:", length(which(!is.na(df_loss_complete$KoordinateNord)))), "\n")
+cat(paste("Difference:", dim(df_loss_complete)[1] - length(which(!is.na(df_loss_complete$KoordinateNord)))), "\n")
+
+cat("\n\n")
+cat("Remark:")
+cat("\n")
+cat(paste0(dim(df_loss)[1]-dim(df_loss_complete)[1], " losses without a current building belonging to demolished buildings. This claims will be lost.\n"))
+
+```
+
+# Checking spatial distribution
+Transform the LV95 CH-Coords to WGS84 if needed (for example for a leaflet plot).
+```{r}
+# Convert exposure data frame to sf object
+df_point_exp <- df_exp %>%
+  st_as_sf(coords = c("KoordinateOst", "KoordinateNord"), crs = 2056)
+# Transform into a wgs84 coordinat system
+df_point_exp_wgs84 <- st_transform(df_point_exp, 4326)
+
+# Convert hail loss data frame to sf object
+df_point_loss <- df_loss_complete %>%
+  st_as_sf(coords = c("KoordinateOst", "KoordinateNord"), crs = 2056)
+# Transform into a wgs84 coordinat system
+df_point_loss_wgs84 <- st_transform(df_point_exp, 4326)
+```
+
+## Check exposure data
+Plot all data in a map with ggplot.
+```{r}
+# This works!
+ggplot(df_point_exp) +
+  geom_sf(colour = "blue", size = 1) +
+  coord_sf(default_crs = sf::st_crs(2056)) +
+  theme_bw()
+
+# # TEST MHE
+# ggplot(df_point_exp) +
+#   geom_sf(colour = "blue", size = 1) +
+#   coord_sf(default_crs = sf::st_crs(2056)) +
+#   theme_bw()
+# 
+# 
+# 
+# #merge the london (a sf-object) wards into one boundary file
+# london_union <- london %>%
+#   group_by("group") %>%
+#   summarise()
+# 
+# df_point_loss_wgs84_union  <- df_point_loss_wgs84 %>% 
+#   group_by("group") %>% 
+#   summarise()
+# 
+# #generate a grid of points separated hexagonally
+# #no way to do this purely in sf yet, use the rgdal package
+# hex_points <- spsample(as_Spatial(london_union), type = "hexagonal", cellsize = 0.01)
+# 
+# hex_points <- spsample(as_Spatial(df_point_loss_wgs84_union), type = "hexagonal", cellsize = 0.01)
+# 
+# #generate hexgaon polygons from these points
+# hex_polygons <- HexPoints2SpatialPolygons(hex_points) %>%
+#   st_as_sf(crs = st_crs(london_union)) %>%
+#   #clip to the london shapefile
+#   st_intersection(., london_union)
+# 
+# 
+# #generate hexgaon polygons from these points
+# hex_polygons <- HexPoints2SpatialPolygons(hex_points) %>%
+#   st_as_sf(crs = st_crs(df_point_loss_wgs84_union))
+```
+
+Plot a leaflet map of exposure data. For better performance, plot n random rows.
+```{r}
+n <- 10000
+# Sample n random rows
+df_sample <- df_point_exp_wgs84 %>% 
+  slice_sample(n = n)
+
+# Extract coordinates for point plotting
+coords <- st_coordinates(df_sample)
+# coords <- st_coordinates(df_point_exp_wgs84)
+lat = coords[, 2]
+long = coords[,1]
+
+leaflet(data = df_sample) %>%
+  setView(lng=8.60, lat=47.4, zoom = 9) %>% 
+  # addTiles() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addCircleMarkers(
+    lng = long,
+    lat = lat,
+    color = "blue",
+    opacity = 0.5,
+    radius = 1)
+
+  # # MHE: TEST library(leaflet.extras)
+  #   addHeatmap(
+  #   lng = long, lat = lat, intensity = df_point_exp_wgs84$Versicherungssumme,
+  #   blur = 20, max = 0.05, radius = 15)
+
+# If basemap doesn't show, change proxy setting!
+```
+
+## Check Loss data
+Plot all data in a map with ggplot.
+```{r}
+ggplot(df_point_loss) +
+  geom_sf(colour = "red", size = 1) +
+  coord_sf(default_crs = sf::st_crs(2056)) +
+  theme_bw()
+```
+
+Plot a leaflet map of loss data. For better performance, plot n random rows.
+```{r}
+n <- 10000
+# Sample n random rows
+df_sample <- df_point_loss_wgs84 %>% 
+  slice_sample(n = n)
+
+# Extract coordinates for point plotting
+coords <- st_coordinates(df_sample)
+lat = coords[, 2]
+long = coords[,1]
+
+leaflet(data = df_sample) %>%
+  setView(lng=8.60, lat=47.4, zoom = 9) %>% 
+  # addTiles() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addCircleMarkers(
+    lng = long,
+    lat = lat,
+    color = "red",
+    opacity = 0.5,
+    radius = 1)
+
+# If basemap doesn't show, change proxy setting!
+```
+
+Write data as csv files to disk.
+```{r}
+write_excel_csv(df_exp, here(path_output, "GVZ_Exposure_202201.csv"), delim = ";")
+write_excel_csv(df_loss_complete, here(path_output, "GVZ_Hail_Loss_200001_to_202203.csv"), delim = ";")
+```
+
