@@ -50,6 +50,7 @@ Remarks:
 - 01. & 02.08.2017 counts as two events
 - 12. & 13.07.2021 counts as one event: Put claims from 12.07. to the 13.07.2021 event
 - We only have radar date from 2004 on
+- We don't have the radar files for the 13.07.2011 event
 
 Generate one CSV Table per each event (put claims from 12.07. to the 13.07.2021 event) but first, do some data wranling:
 - Exclude zero losses
@@ -82,17 +83,29 @@ df_lv03 <- data.frame(df_lv03) %>%
 
 Generate one CSV Table per each event (put claims from 12.07. to the 13.07.2021 event).
 ```{r}
-## TO DO FOR LOOP
-tbl_event_selected <- tbl_events %>% 
-  filter(Schadendatum > as.Date("01012004", "%d%m%Y"))
+# Remove dates before 2004, remove 12.07.2021 and 13.07.2011 from event table
+tbl_events <- tbl_events %>% 
+  filter(Schadendatum != as.Date("20210712", "%Y%m%d") &
+           Schadendatum != as.Date("20110713", "%Y%m%d"),
+         Schadendatum > as.Date("20031231", "%Y%m%d"))
 
-df_event <- df_lv03 %>% 
-  filter(Schadendatum == tbl_event_selected$Schadendatum[1])
+for (i in 1:dim(tbl_events)[1])
+{
+  ## If event is 13.07.2021, then take claims from 12.07.2021 and 13.07.2021
+  ifelse(tbl_events$Schadendatum[i] == as.Date("20210713", "%Y%m%d"),
+         df_event <- df_lv03 %>% 
+           filter(Schadendatum == as.Date("20210713", "%Y%m%d") |
+           Schadendatum == as.Date("20210712", "%Y%m%d")),
+         df_event <- df_lv03 %>% 
+           filter(Schadendatum == tbl_events$Schadendatum[i])
+         )
 
-out_file <- paste0("Eventloss_", format(tbl_event_selected$Schadendatum[1], "%Y%m%d"), ".csv")
+  out_file <- paste0("Eventloss_", format(tbl_events$Schadendatum[i], "%Y%m%d"), ".csv")
   
-write_excel_csv(df_event, here(path_tbl, out_file), delim = ";")
+  write_excel_csv(df_event, here(path_tbl, out_file), delim = ";")
+  
+  cat("\n")
+  cat("csv-file saved:", here(path_tbl, out_file))
+}
 
-cat("\n\n")
-cat("csv-file saved:", here(path_tbl, out_file))
 ```

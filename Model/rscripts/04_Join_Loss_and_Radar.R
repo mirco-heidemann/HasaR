@@ -3,47 +3,46 @@
 ##  meteoSchweiz Daten
 ##
 ##  Mirco Heidemann, 05/2014
-##  Modified 03/2016, 11/2017
+##  Modified: 03/2016, 11/2017, 05/2022
 ## ----
 
-## relative pfade spezifizieren
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-## move up one directory
-setwd("..")
+## raster Package laden
+library(rgdal)
+library(here)
+library(tidyverse)
 
-pth.data <- ("../data/")
-pth.portfol <- ("../data/tables/")
-pth.func <- ("../data/rfunctions/")
-pth.tif <- ("./radarTiffs/")
-pth.rdata <- ("../data/rdata/")
-pth.tbl <- ("./tables/")
+pth_func <- here("Data/rfunctions/")
+pth_tif <- here("Model/radarTiffs/")
+pth_rdata <- here("Data/rdata/")
+#pth_tbl <- here("Model/tables")
 
 ## Skript zum Rotieren bzw. Spiegeln vom Radar-Bild laden
-source(paste0(pth.func, 'rotate.R'))
+source(here(pth_func, 'rotate.R'))
 
 ## gegitterte Gemdat-Daten lesen
-load(paste0(pth.rdata, 'GemdatGitter_2017.Rdata'))
+load(here(pth_rdata, '202201_Exposure_Grid.Rdata'))
 
 Anzahl[is.na(Anzahl)] <- 0
 ind.geb <- which(Anzahl >= 0)
 
 ## Dateien der gegitterten Schaden-Daten und Daten der Ereignisse definieren
-in.files <- list.files(pth.tbl, '.Gitter.Rdata')
-datum <- paste('20', sub('.Gitter.Rdata', '', sub('hagelschad.', '',
+in.files <- list.files(pth_rdata, '_Gitter.Rdata')
+chr_datum <- paste(sub('_Gitter.Rdata', '', sub('Eventloss_', '',
                                                   in.files)), sep = '')
-
-## raster Package laden
-library(rgdal)
+# ## --- Check
+# load(here(pth_rdata, in.files[10]))
+# image(schad.SchadSum)
+# ## --
 
 ## Tabelle fuer Daten definieren
 grid.data <- data.frame()
 
 for (i in 1:length(in.files)) {
-  in.file <- paste0(pth.tbl, in.files[i])
+  in.file <- here(pth_rdata, in.files[i])
   load(in.file)
   
   ## load POH from GeoTiff
-  poh.file <- paste0(pth.tif, 'BZC', datum[i], '.tiff')
+  poh.file <- here(pth_tif, paste0('poh.', chr_datum[i], '.tif'))
   poh <- readGDAL(poh.file)
   
   ## definieren Vektoren fuer x- und y-Koordinaten
@@ -66,7 +65,7 @@ for (i in 1:length(in.files)) {
   poh <- poh[ind.x, ind.y]
   
   ## load meshs.class from GeoTiff
-  meshs.class.file <- paste0(pth.tif, 'MZC', datum[i], '.tiff')
+  meshs.class.file <- here(pth_tif, paste0('meshs.', chr_datum[i], '.tiff'))
   meshs.class <- readGDAL(meshs.class.file)
   
   ## definieren Vektoren fuer x- und y-Koordinaten
@@ -89,7 +88,7 @@ for (i in 1:length(in.files)) {
   meshs.class <- meshs.class[ind.x, ind.y]
   
   if (i == 1) {
-    grid.data <- data.frame(event = rep(datum[i], length(ind.geb)),
+    grid.data <- data.frame(event = rep(chr_datum[i], length(ind.geb)),
                             Anzahl = Anzahl[ind.geb],
                             VersSumme = VersSumme[ind.geb],
                             schad.Anzahl = schad.Anzahl[ind.geb],
@@ -99,7 +98,7 @@ for (i in 1:length(in.files)) {
                             meshs.class = meshs.class[ind.geb],
                             stringsAsFactors = FALSE)
   } else {
-    data.tmp <- data.frame(event = rep(datum[i], length(ind.geb)),
+    data.tmp <- data.frame(event = rep(chr_datum[i], length(ind.geb)),
                            Anzahl = Anzahl[ind.geb],
                            VersSumme = VersSumme[ind.geb],
                            schad.Anzahl = schad.Anzahl[ind.geb],
@@ -124,15 +123,21 @@ ind <- which(is.na(grid.data$VersSumme))
 if (length(ind) > 0) grid.data$VersSumme[ind] <- 0
 
 ## von meshs.class abstufung zu meteoschweiz hagelkorngroesse (meshs)
-meshs.tab <- data.frame(meshs.class = seq(from=0, to=9, by=1),
-                        meshs = seq(from=1.5, to=6, by=0.5))
+meshs.tab <- data.frame(meshs.class = seq(from=0, to=10, by=1),
+                        meshs = seq(from=1.5, to=6.5, by=0.5))
 grid.data$meshs <- meshs.tab$meshs[match(grid.data$meshs.class, meshs.tab$meshs.class)]
 ## hagelkorngroessen kleiner als 2 gibt es nicht in meshs
-grid.data$meshs[which(grid.data$meshs<2)] <- 0
+grid.data$meshs[which(grid.data$meshs < 2)] <- 0
+## hagelkorngroessen grösser als 6 werden nicht differenziert
+grid.data$meshs[which(grid.data$meshs > 9)] <- 0
 grid.data <- grid.data[,-8]
 
-# save(grid.data, file=paste0(pth.tbl, "events.schadtabelle.meteoschweiz.2017.Rdata"))
+## Tabelle zur Übersicht
+grid.data %>% 
+  group_by(Event = as.Date(event, "%Y%m%d")) %>% 
+  summarise(Schadenanzahl = sum(schad.Anzahl),
+            Schadensumme = sum(schad.SchadSum))
 
-(tbl <- aggregate(grid.data[,c(4,6)], by=list(grid.data$event), sum))
-## R beenden ohne etwas zu speichern
-##q('no')
+# save(grid.data, file=here(pth_rdata, "2022_Lossevents_Grid.Rdata"))
+
+

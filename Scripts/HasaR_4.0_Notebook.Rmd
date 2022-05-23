@@ -26,9 +26,9 @@ Statistische Modellierung von Hagelschaeden anhand Radardate fuer Ereignisse mit
 Version: HasaR 4.0
 ---
 
-```{r}
+```{r eval = FALSE, warning = FALSE}
 ## HIER DAS DATUM DES RADARBILDS ANGEBEN
-eventDat <- '01.07.2012'
+eventDat <- '01.08.2017'
 ```
 
 **Funktionen und Packages laden**
@@ -53,9 +53,9 @@ pth_rdata <- here("Data/rdata/")
 pth_shp <- here("Data/shapes/")
 
 ## Skript zum Rotieren bzw. Spiegeln vom Radar-Bild laden
-source(paste0(pth_func, 'Rotate.R'))
+source(here(pth_func, 'Rotate.R'))
 ## Funktion um neue Faktor-Levels predict-Datensatz auf NA zu setzen
-source(paste0(pth_func, 'RemoveMissingLevels.R'))
+source(here(pth_func, 'RemoveMissingLevels.R'))
 ```
 
 Daten laden und aufbereiten
@@ -67,18 +67,18 @@ meshs_name <- sub('poh', 'meshs', poh_name)
 meshs_name <- sub('tif', 'tiff', meshs_name)
 
 ## load the HasaR model:
-load(paste0(pth_rdata, 'mLogit.rda'))
-load(paste0(pth_rdata, 'mGamma.rda'))
-load(paste0(pth_rdata, 'mPois.rda'))
+load(here(pth_rdata, 'mLogit.rda'))
+load(here(pth_rdata, 'mGamma.rda'))
+load(here(pth_rdata, 'mPois.rda'))
 
 ## load gegitterte GemDat Daten
-load(paste0(pth_rdata, 'GemdatGitter.Rdata'))
+load(here(pth_rdata, '202201_Exposure_Grid.Rdata'))
 
 ## GeoTiff lesen, kommen in folgendem Koordinatensystem
 ## +proj=somerc +lat_0=46.9524055555556 +lon_0=7.43958333333333 +k_0=1 +x_0=600000 
 ## +y_0=200000 +ellps=bessel +towgs84=674.374,15.056,405.346,0,0,0,0 +units=m +no_defs
-poh <- readGDAL(paste0(pth_tif, poh_name))
-meshs <- readGDAL(paste0(pth_tif,meshs_name))
+poh <- readGDAL(here(pth_tif, poh_name))
+meshs <- readGDAL(here(pth_tif,meshs_name))
 
 ## definieren Vektoren fuer x- und y-Koordinaten
 ## geht auch mit bbox(poh) und gridparameters(poh)
@@ -105,7 +105,7 @@ if (length(ind.x) > 0 & length(ind.y) > 0) {
 Alle gegitterten Daten in einen Dataframe stecken
 ```{r eval = FALSE, warning = FALSE}
 ## In Gitterzellen wo keine Gebaeude stehen (Anzahl = 0) fehlt
-## der GVZ die Information zu m?glichen Hagelschaeden.
+## der GVZ die Information zu möglichen Hagelschaeden.
 ind_geb <- which(!is.na(Anzahl)) ## Nur Gitterzellen mit Geb
 dat <- data.frame(event = rep(datum, length(ind_geb)),
                   Anzahl = as.numeric(Anzahl[ind_geb]),
@@ -125,8 +125,7 @@ dat$meshs <- tbl_meshs$meshs[match(dat$meshsclass, tbl_meshs$meshsclass)]
 
 ## hagelkorngroessen kleiner als 2 gibt es nicht in meshs
 dat <- dat %>% mutate(meshs = ifelse(meshs < 2, 0, meshs),
-                      fact_meshs = as.factor(meshs)) %>% 
-  # dplyr::select(-c(geox, geoy)) %>%
+                      fact_meshs = as.factor(meshs)) %>%
   filter(poh >= 0.8) ## nur gitterzellen mit mindestens poh 80%
 ```
 
@@ -228,35 +227,35 @@ for (i in 1:length(xs)) {
 df_estimates <- data.frame(lower_loss = sum(newdat$estimated_loss_ll),
                        best_estimate_loss = sum(newdat$estimated_loss),
                        upper_loss = sum(newdat$estimated_loss_ul),
-                       lower_claims = sum(newdat$estimated_claims_ll),
-                       best_estimate_claims = sum(newdat$estimated_claims),
-                       upper_claims = sum(newdat$estimated_claims_ul))
+                       lower_claims = round(sum(newdat$estimated_claims_ll)),
+                       best_estimate_claims = round(sum(newdat$estimated_claims)),
+                       upper_claims = round(sum(newdat$estimated_claims_ul)))
 
-# ## Schadenschaetzung ausgeben:
-# message(print(paste0('HASAR - Der geschaetzte Schaden betraegt: ',
-#                      round(df_estimates$best_estimate_loss/1e6, 1), ' Mio. CHF bei rund ',
-#                      format(round(df_estimates$best_estimate_laims), big.mark = "'"),' Anzahl Schaeden.')))
-# message(print(paste0('HASAR - Der geschaetzte Schaden liegt zwischen: ',
-#                      round(df_estimates$lower_loss/1e6, 1), ' Mio CHF und ',
-#                      round(df_estimates$upper_loss/1e6, 1), ' Mio CHF')))
+## Schadenschaetzung ausgeben:
+cat(paste0('HASAR - Der geschätzte Schaden beträgt: ',
+                     round(df_estimates$best_estimate_loss/1e6, 1), ' Mio. CHF bei rund ',
+                     format(round(df_estimates$best_estimate_claims), big.mark = "'"),' Anzahl Schäden.'))
+cat(paste0('HASAR - Der geschätzte Schaden liegt zwischen: ',
+                     round(df_estimates$lower_loss/1e6, 1), ' Mio CHF und ',
+                     round(df_estimates$upper_loss/1e6, 1), ' Mio CHF'))
 ```
 
 
 #### PDF Karten erstellen
 ```{r eval = FALSE, warning = FALSE}
 ## Transform raster as data.frame to be later used with ggplot
-source(paste0(pth_func, 'f.gplotData.R'))
+source(here(pth_func, 'f.gplotData.R'))
 
 ## shapes fuer plots einlesen
-sh_gemeinde <- readOGR(paste0(pth_shp, 'gemeinden.2016.shp'), layer = 'gemeinden.2016')
-sh_fluss <-readOGR(paste0(pth_shp, 'Fluesse_gross.shp'), layer = 'Fluesse_gross')
-sh_seen <-readOGR(paste0(pth_shp, 'seendet_250.shp'), layer = 'seendet_250')
-sh_Flug <-readOGR(paste0(pth_shp, 'AVZH_Flughafen_Kloten.shp'),
+sh_gemeinde <- readOGR(here(pth_shp, 'gemeinden.2016.shp'), layer = 'gemeinden.2016')
+sh_fluss <-readOGR(here(pth_shp, 'Fluesse_gross.shp'), layer = 'Fluesse_gross')
+sh_seen <-readOGR(here(pth_shp, 'seendet_250.shp'), layer = 'seendet_250')
+sh_Flug <-readOGR(here(pth_shp, 'AVZH_Flughafen_Kloten.shp'),
                   layer = 'AVZH_Flughafen_Kloten')
-sh_bezirke <- readOGR(paste0(pth_shp, 'Bezirke.shp'), layer = 'Bezirke')
-sh_schaetzkreis <- readOGR(paste0(pth_shp, 'gvz_schaetzkreise.shp'),
+sh_bezirke <- readOGR(here(pth_shp, 'Bezirke.shp'), layer = 'Bezirke')
+sh_schaetzkreis <- readOGR(here(pth_shp, 'gvz_schaetzkreise.shp'),
                            layer = 'gvz_schaetzkreise')
-shp_kanton    <- readOGR(paste0(pth_shp, 'Knt_Umriss wgs84.shp'),
+shp_kanton    <- readOGR(here(pth_shp, 'Knt_Umriss wgs84.shp'),
                          layer = "Knt_Umriss wgs84")
 
 ## fortify the shapefiles (a function of ggplot) to get it into a dataframe
@@ -364,11 +363,11 @@ height_plot = (sqrt(2)/1) * width_plot
 # R will want to autocomplete cairo_pdf to cairo_pdf() (note the parentheses)
 # This will not work with the parentheses; ensure there aren't any
 
-ggsave(ggMeshs, filename = paste0(pth_pres, "ggMeshs.pdf"), device = cairo_pdf,
+ggsave(ggMeshs, filename = here(pth_pres, "ggMeshs.pdf"), device = cairo_pdf,
        width = width_plot, height = height_plot, units = "in")
 
-cat(paste0('Das MESHS-Radarbild wurde in folgendem Ordner gespeichert:  ',
-                     paste0(getwd(), pth_pres, 'meshs.pdf')))
+cat(paste0('Das MESHS-Radarbild wurde in folgendem Ordner gespeichert:',
+                     here(pth_pres, "ggMeshs.pdf")))
 
 ggMeshs
 ```
@@ -454,11 +453,11 @@ height_plot = (sqrt(2)/1) * width_plot
 # R will want to autocomplete cairo_pdf to cairo_pdf() (note the parentheses)
 # This will not work with the parentheses; ensure there aren't any
 
-ggsave(ggPoh, filename = paste0(pth_pres, "poh.pdf"), device = cairo_pdf,
+ggsave(ggPoh, filename = here(pth_pres, "poh.pdf"), device = cairo_pdf,
        width = width_plot, height = height_plot, units = "in")
 
-cat(paste0('Das POH-Radarbild wurde in folgendem Ordner gespeichert:  ',
-                     paste0(getwd(), pth_pres, 'poh.pdf')))
+cat(paste0('Das POH-Radarbild wurde in folgendem Ordner gespeichert:',
+                     here(pth_pres, "poh.pdf")))
 
 ggPoh
 ```
@@ -582,11 +581,11 @@ height_plot = (sqrt(2)/1) * width_plot
 # R will want to autocomplete cairo_pdf to cairo_pdf() (note the parentheses)
 # This will not work with the parentheses; ensure there aren't any
 
-ggsave(ggSchad, filename = paste0(pth_pres, "Auswirkung.pdf"), device = cairo_pdf,
+ggsave(ggSchad, filename = here(pth_pres, "Auswirkung.pdf"), device = cairo_pdf,
        width = width_plot, height = height_plot, units = "in")
 
-cat(paste0('Die Schadengrid Grafik wurde in folgendem Ordner gespeichert:  ',
-                     paste0(getwd(), pth_pres, 'schaden.pdf')))
+cat(paste0('Die Schadengrid Grafik wurde in folgendem Ordner gespeichert: ',
+                     here(pth_pres, "Auswirkung.pdf")))
 
 ggSchad
 ```
@@ -688,12 +687,12 @@ height_plot = (sqrt(2)/1) * width_plot
 # R will want to autocomplete cairo_pdf to cairo_pdf() (note the parentheses)
 # This will not work with the parentheses; ensure there aren't any
 
-ggsave(ggSchadGem, filename = paste0(pth_pres, "Betroffene_Gemeinden.pdf"),
+ggsave(ggSchadGem, filename = here(pth_pres, "Betroffene_Gemeinden.pdf"),
        device = cairo_pdf, width = width_plot, height = height_plot,
        units = "in")
 
-cat(paste0('Die Grafik "Schaden pro Gemeinde" wurde in folgendem Ordner gespeichert: ',
-                     paste0(getwd(), pth_pres, 'schaden_gemeinde.pdf')))
+cat(paste0('Die Grafik "Schaden pro Gemeinde" wurde in folgendem Ordner gespeichert:',
+                     here(pth_pres, "Betroffene_Gemeinden.pdf")))
 
 ggSchadGem
 ```
@@ -962,26 +961,28 @@ Meshsclass | MESHS [cm] | Impact     |
 ```{r warning = FALSE}
 ## Lineare Impact Function von Haimo
 tbl_impfct_lin <- data.frame(meshs_class = seq(from=0, to=10, by=1),
-                         meshs = seq(from=1.5, to=6.5, by=0.5),
-                         impact = c(0.000001,
-                                    0.0000905,
-                                    0.0000933,
-                                    0.0000962,
-                                    0.000099,
-                                    0.000102,
-                                    0.000105,
-                                    0.000108,
-                                    0.00011,
-                                    0.000113,
-                                    0.000116))
+                             meshs = seq(from=1.5, to=6.5, by=0.5),
+                             impact = c(0,
+                                        0.0000823,
+                                        0.0000894,
+                                        0.0000965,
+                                        0.000104,
+                                        0.000111,
+                                        0.000118,
+                                        0.000125,
+                                        0.000132,
+                                        0.000139,
+                                        0.000146))
+
 
 ## Konstante Impact Function von Haimo
 tbl_impfct_lin <- data.frame(meshs_class = seq(from=0, to=10, by=1),
                          meshs = seq(from=1.5, to=6.5, by=0.5),
                          impact = rep(0.000146, times = 11))
 
+
 ## definieren das Objekt mit den Radar-Daten fuer interp.surface
-loc_obj <- cbind(gemdat$geox, gemdat$geoy)
+loc_obj <- cbind(df_exp_lv03$geox, df_exp_lv03$geoy)
 grid_obj_poh <- list(x = xs,
                    y = ys,
                    z = poh_array)
@@ -989,9 +990,7 @@ grid_obj_meshs <- list(x = xs,
                      y = ys,
                      z = meshs_array)
 
-df_interpol <- gemdat %>% dplyr::select(strGebNr, gebNr, gemeinde, versSum,
-                                        zweckcode, gebBaujahr, volumen,
-                                        geox, geoy) %>% 
+df_interpol <- df_exp_lv03 %>% dplyr::select(versSum, geox, geoy) %>% 
   ## interpolation der poh und meshs werte auf die gebaeude
   mutate(poh = round(interp.surface(grid_obj_poh, loc_obj),1) *10,
          meshs_class = round(interp.surface(grid_obj_meshs, loc_obj))) %>%

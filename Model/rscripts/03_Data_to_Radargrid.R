@@ -107,9 +107,14 @@ if (length(ind.x) > 0 & length(ind.y) > 0) {
   poh.array <- poh.array[ind.x, ind.y]
 }
 
-## definieren Arrays fuer die Anzahl und Versicherungssumme pro
+# ## definieren Arrays fuer die Anzahl und Versicherungssumme pro
+# ## Gitterzelle
+# Anzahl <- VersSumme <- array(dim = c(length(xs), length(ys)))
+
+## definiere Arrays fuer die Anzahl und Versicherungssumme pro
 ## Gitterzelle
-Anzahl <- VersSumme <- array(dim = c(length(xs), length(ys)))
+Anzahl <- VersSumme <- x.coord <- y.coord <- array(dim = c(length(xs),
+                                                           length(ys)))
 
 ## Schleife ueber Gitterzellen
 for (i in 1:length(xs)) {
@@ -121,6 +126,8 @@ for (i in 1:length(xs)) {
     if (length(ind) > 0) {
       Anzahl[i,j] <- length(ind)
       VersSumme[i,j] <- sum(df_exp_lv03$versSum[ind])
+      x.coord[i,j] <- xs[i]
+      y.coord[i,j] <- ys[j]
     }
   }
 }
@@ -131,8 +138,11 @@ for (i in 1:length(xs)) {
 
 ## Datum aus dem Geb. Daten File extrahieren
 per_char <- str_extract(input_csv, "[[:digit:]]+")
-out_file_char <- here(pth_rdata, paste0('Exposure_Grid_', per_char,'.Rdata'))
-# save(xs, ys, Anzahl, VersSumme, file=out_file_char)
+out_file_char <- here(pth_rdata, paste0(per_char, '_Exposure_Grid', '.Rdata'))
+
+save(xs, ys, ind.x, ind.y, x.coord, y.coord, Anzahl,
+     VersSumme, df_exp_lv03, per_char,
+     file = out_file_char)
 
 ## -----
 ## Schaden einlesen und auf gleiche Gitter-Dimensionen aggregieren
@@ -141,23 +151,25 @@ out_file_char <- here(pth_rdata, paste0('Exposure_Grid_', per_char,'.Rdata'))
 in_files <- list.files(pth_tbl, '.csv')
 
 for (f in 1:length(in_files)) {
-  schad <- read.csv2(in_files[f], stringsAsFactors = FALSE)
-  schad <- schad %>% mutate(indexSchad = as.numeric(indexSchad),
-                  geox = as.numeric(geox),
-                  geoy = as.numeric(geoy),
-                  vs = as.numeric(vs))
-
+  file_name <- here(pth_tbl, in_files[f])
+  schad <- read_delim(file_name, delim = ';',
+                      show_col_types = FALSE) %>%
+    mutate(indexSchad = as.numeric(schad_index),
+           geox = as.numeric(geox),
+           geoy = as.numeric(geoy),
+           vs = as.numeric(Versicherungssumme))
+  
   ## Arrays definieren (gleiche Dimension wie oben)
   schad.Anzahl <- schad.VersSumme <- schad.SchadSum <-
     array(dim = c(length(xs), length(ys)))
-
+  
   ## Schleife ueber Gitterzellen
   for (i in 1:length(xs)) {
     for (j in 1:length(ys)) {
       ind <- which(schad$geox > (xs[i] - x.cellsize / 2) &
-        schad$geox <= (xs[i] + x.cellsize / 2) &
-        schad$geoy > (ys[j] - y.cellsize / 2) &
-        schad$geoy <= (ys[j] + y.cellsize / 2))
+                     schad$geox <= (xs[i] + x.cellsize / 2) &
+                     schad$geoy > (ys[j] - y.cellsize / 2) &
+                     schad$geoy <= (ys[j] + y.cellsize / 2))
       if (length(ind) > 0) {
         schad.Anzahl[i,j] <- length(ind)
         schad.VersSumme[i,j] <- sum(schad$vs[ind])
@@ -165,9 +177,11 @@ for (f in 1:length(in_files)) {
       }
     }
   }
-  out_file <- sub('.csv', '.Gitter.Rdata', in_files[f])
-  save(xs, ys, schad.Anzahl, schad.VersSumme, schad.SchadSum,
-       file = out_file)
+  
+  out_file <- here(pth_rdata, sub('.csv', '_Gitter.Rdata', in_files[f]))
+  # save(xs, ys, schad.Anzahl, schad.VersSumme, schad.SchadSum, file = out_file)
+  
+  cat("\n")
+  cat("Gridded Rdata-file saved:", here(pth_rdata, out_file))
 }
-## R beenden ohne etwas zu speichern
-#q('no')
+

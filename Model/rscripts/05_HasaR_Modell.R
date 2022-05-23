@@ -19,30 +19,22 @@
 
 ##  Modified 06/2016
 ##  HasaR 2.0: 11/2017
+##  HasaR 4.0: 05/2022
 ## ----
-
-## relative pfade spezifizieren
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-## move up one directory
-setwd("..")
-
-pth.data <- ("../data/")
-pth.portfol <- ("../data/tables/")
-pth.func <- ("../data/rfunctions/")
-pth.tif <- ("./radarTiffs/")
-pth.rdata <- ("../data/rdata/")
-pth.tbl <- ("./tables/")
 
 library(MASS)
 library(dplyr)
-library(stringr)
+library(tidyverse)
+library(here)
+
+pth_func <- here("Data/rfunctions/")
+pth_rdata <- here("Data/rdata/")
 
 ## Funktion um neue Faktor-Levels predict-Datensatz auf NA zu setzen
-source(paste0(pth.func, 'RemoveMissingLevels.R'))
+source(here(pth_func, 'RemoveMissingLevels.R'))
 
-## gegitterte daten laden (aus skrip 02...)
-## grid.data enthaelt die beobachteten schaeden
-load(paste0(pth.tbl, 'events.schadtabelle.meteoschweiz.2017.Rdata'))
+## Gegitterte Schadendaten laden: grid.data
+load(here(pth_rdata, '2022_Lossevents_Grid.Rdata'))
 
 ## Datensatz fuer die modellierung und validierung:
 ## poh, meshs als faktoren, nonzero binaer
@@ -54,33 +46,36 @@ dat.meteo <- grid.data %>%
   filter(poh >= 0.8)## nur gitterzellen mit mindestens poh 80%
 
 ## Hagelereignis auswaehlen
-in.files <- list.files(pth.tbl, '.Gitter.Rdata')
-event.datum <- paste('20', sub('.Gitter.Rdata', '',
-                               sub('hagelschad.', '',
-                                       in.files)), sep = '')
+in.files <- list.files(pth_rdata, '_Gitter.Rdata')
+event.datum <- sub('_Gitter.Rdata', '', sub('Eventloss_', '', in.files))
 
 ## ---- SCHADEN - RADAR MODELL
 ## Deviance is a measure of goodness of fit of a generalized linear model.
 ## Or rather, it's a measure of badness of fit. Higher numbers indicate worse fit.
 
 ## Datensatz fuer die modellierung
-## folgende Hagelzuege fuer HasaR 2.0
+## folgende Hagelzuege fuer HasaR 4.0
 dat <- dat.meteo %>%
-  filter(event == 20040812 | event == 20120701 | event == 20170801)
+  filter(event == 20040812 |
+           event == 20110707 |
+           event == 20120701 |
+           event == 20170801)
   
 # BESTES MODELL
-m_logit <- glm(nonzero ~ fact_poh + fact_meshs + VersSumme, family = binomial(link="logit"),
+m_logit <- glm(nonzero ~ fact_poh + fact_meshs + VersSumme,
+               family = binomial(link="logit"),
                data = dat)
 
 m_gamma <- glm(schad.SchadSum ~ fact_meshs + Anzahl,
                family=Gamma(link="log"), data = subset(dat, nonzero == 1))
 
-m_pois <- glm(schad.Anzahl ~ fact_meshs + fact_poh + VersSumme, family=poisson(link="log"),
+m_pois <- glm(schad.Anzahl ~ fact_meshs + fact_poh + VersSumme,
+              family=poisson(link="log"),
               data = subset(dat, nonzero == 1))
 
-# anova(m.logit, test="Chisq")
-# anova(m.gamma, test="Chisq")
-# anova(m.pois, test="Chisq")
+# anova(m_logit, test="Chisq")
+# anova(m_gamma, test="Chisq")
+# anova(m_pois, test="Chisq")
 
 # summary(m_logit)
 # summary(m_gamma)
@@ -88,9 +83,9 @@ m_pois <- glm(schad.Anzahl ~ fact_meshs + fact_poh + VersSumme, family=poisson(l
 
 
 # ## save the models
-# save(m_logit, file = paste0(pth.rdata, 'mLogit.rda'))
-# save(m_gamma, file = paste0(pth.rdata, 'mGamma.rda'))
-# save(m_pois, file = paste0(pth.rdata, 'mPois.rda'))
+# save(m_logit, file = here(pth_rdata, 'mLogit.rda'))
+# save(m_gamma, file = here(pth_rdata, 'mGamma.rda'))
+# save(m_pois, file = here(pth_rdata, 'mPois.rda'))
 
 ## ----
 ## Vergleich der beobachteten Werte und den modellierten
@@ -110,16 +105,16 @@ for(j in 1:length(event.datum)){
     dplyr::select(fact_meshs, fact_poh, Anzahl, VersSumme)
 
   ## wie gut passt das modell auf den event?
-  pred.m.logit <- predict(m.logit, newdata=newDat, type="response")
+  pred.m.logit <- predict(m_logit, newdata=newDat, type="response")
   
-  ## mit der funktion 'removeMissing.Levels' werden alle faktor levels
+  ## mit der funktion 'RemoveMissingLevels' werden alle faktor levels
   ## die in den original daten (dat) nicht vorkommen auf NA gesetzt
-  pred.m.gamma <- predict(m.gamma,
-                          newdata=removeMissing.Levels(fit=m.gamma, test_data=newDat),
+  pred.m.gamma <- predict(m_gamma,
+                          newdata=RemoveMissingLevels(fit=m_gamma, test_data=newDat),
                           type="response")
 
-  pred.pois <- predict(m.pois,
-                          newdata=removeMissing.Levels(fit=m.pois, test_data=newDat),
+  pred.pois <- predict(m_pois,
+                          newdata=RemoveMissingLevels(fit=m_pois, test_data=newDat),
                           type="response")
   
   # pred.m.gamma <- predict(m.gamma, newdata=newDat, type="response")
