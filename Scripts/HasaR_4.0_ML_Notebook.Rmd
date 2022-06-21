@@ -1,0 +1,125 @@
+---
+title: "HasaR - Hagelschadenschaetzung anhand Radardaten"
+subtitle: "ML Approach"
+author: "Mirco Heidemann"
+date: "June 2022"
+output:
+  pdf_document: default
+---
+Die Modellierung besteht aus zwei Teilen (bedingte Wahrscheinlichkeit):
+Im ersten Teil wird unterschieden, ob ein Schaden eintritt (Schaden ja/nein)
+  - Logistische Regression
+
+Tritt ein Schaden ein, so wird im zweiten Teil der erwartete Schaden
+pro Gitterzellen mit einer Gamma likelihood (link=log) modelliert.
+- GLM mit Gamma Verteilung
+- GLM mit Poisson Verteilung fuer die geschaetzte Anzahl Schaeden
+
+Version: HasaR 4.0 with a ML Approach
+---
+
+**Funktionen und Packages laden**
+RMarkdown files are a special case, as they work slightly differently to .R files in terms of file paths, i.e. they behave like mini projects of their own, where the default working directory is where the Rmd file is saved. To save RMarkdown files in a basic folder structure set up, it’s recommended to use the [here package](https://github.com/jennybc/here_here) and its workflow.
+```{r eval = FALSE, warning = FALSE}
+## Funktionen und Packages laden
+library(MASS)
+library(dplyr)
+library(tidyverse)
+library(here)
+library(caret)
+
+pth_func <- here("Data/rfunctions/")
+pth_rdata <- here("Data/rdata/")
+
+## Gegitterte Schadendaten laden: grid.data
+load(here(pth_rdata, '2022_Lossevents_Grid.Rdata'))
+```
+
+Daten laden und aufbereiten
+```{r eval = FALSE, warning = FALSE}
+grid_schaden <- grid.data %>%
+  mutate(nonzero = ifelse(schad.SchadSum > 0, 1, 0),
+         fact_nonzero = as.factor(nonzero)) %>%
+  filter(Anzahl > 0) ## nur gitterzellen mit mindestens einem gebaeude
+```
+
+The function *createDataPartition* can be used to create a stratified random sample of the data into training and test sets. Create a 80/20% split into training and testing data.
+```{r}
+trainIndex <- createDataPartition(grid_schaden$Anzahl, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+dat_train <- grid_schaden[trainIndex,]
+dat_test  <- grid_schaden[-trainIndex,]
+
+cat('Train rows: ', nrow(dat_train),"\n",
+    'Test rows: ', nrow(dat_test),
+    sep="")
+```
+By default, simple bootstrap resampling is used in the createDataPartition algorithm. Others are available, such as repeated K-fold cross-validation, leave-one-out etc. The function trainControl can be used to specifiy the type of resampling.
+
+The first two arguments to train are the predictor and outcome data objects, respectively. The third argument, method, specifies the type of model (see train Model List or train Models By Tag). To illustrate, we will fit a boosted tree model via the gbm package. The basic syntax for fitting this model using repeated cross-validation is shown below:
+
+See: https://topepo.github.io/caret/model-training-and-tuning.html#an-example
+```{r warning = FALSE}
+## 10-fold Cross Validation
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           ## repeated ten times
+                           repeats = 10)
+```
+
+See: https://remiller1450.github.io/s230f19/caret2.html
+```{r}
+## Logistic regression
+logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+               data = dat_train,
+               method = "glm",
+               family = "binomial",
+               trControl = fitControl)
+
+## Decision Tree
+logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+               data = dat_train,
+               method="ctree",
+               family = "binomial",
+               trControl = fitControl)
+
+## Boosted Random Forest
+gbmFit <- train(nonzero ~ Anzahl + VersSumme + poh + meshs,
+                data = dat_train, 
+                method = "gbm", 
+                trControl = fitControl,
+                verbose = FALSE)
+
+## Neuronal Network
+nnFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+               data = dat_train,
+               method = "nnet",
+               trControl = fitControl,
+               trace = FALSE)
+```
+
+The plot function can be used to examine the relationship between the estimates of performance and the tuning parameters. For example, a simple invokation of the function shows the results for the first performance measure:
+```{r}
+trellis.par.set(caretTheme())
+plot(gbmFit)  
+```
+
+See: https://www.kaggle.com/code/sindhuee/r-caret-example/notebook
+
+Variable importance
+```{r}
+varImp(logitFit)
+```
+
+Test set accuracy
+```{r}
+### predict on test dataset
+logitFit_pred<-predict(logitFit, dat_test)
+
+##results
+confusionMatrix(logitFit_pred, dat_test$diagnosis)
+```
+
+
