@@ -20,6 +20,7 @@ Version: HasaR 4.0 with a ML Approach
 
 **Funktionen und Packages laden**
 RMarkdown files are a special case, as they work slightly differently to .R files in terms of file paths, i.e. they behave like mini projects of their own, where the default working directory is where the Rmd file is saved. To save RMarkdown files in a basic folder structure set up, it’s recommended to use the [here package](https://github.com/jennybc/here_here) and its workflow.
+
 ```{r eval = FALSE, warning = FALSE}
 ## Funktionen und Packages laden
 library(MASS)
@@ -27,6 +28,7 @@ library(dplyr)
 library(tidyverse)
 library(here)
 library(caret)
+library(NeuralNetTools)
 
 pth_func <- here("Data/rfunctions/")
 pth_rdata <- here("Data/rdata/")
@@ -35,22 +37,28 @@ pth_rdata <- here("Data/rdata/")
 load(here(pth_rdata, '2022_Lossevents_Grid.Rdata'))
 ```
 
-Daten laden und aufbereiten
+Daten laden und aufbereiten:
 ```{r eval = FALSE, warning = FALSE}
-grid_schaden <- grid.data %>%
+grid_data <- grid.data %>%
   mutate(nonzero = ifelse(schad.SchadSum > 0, 1, 0),
-         fact_nonzero = as.factor(nonzero)) %>%
-  filter(Anzahl > 0) ## nur gitterzellen mit mindestens einem gebaeude
+         fact_nonzero = as.factor(nonzero))
+```
+
+Examine dataset
+Balancing? fact_nonzero: much more 0's
+```{r}
+summary(grid_data)
+# with(grid_data, plot(grid_data, fact_nonzero, col = fact_nonzero))
 ```
 
 The function *createDataPartition* can be used to create a stratified random sample of the data into training and test sets. Create a 80/20% split into training and testing data.
 ```{r}
-trainIndex <- createDataPartition(grid_schaden$Anzahl, p = .8, 
+trainIndex <- createDataPartition(grid_data$fact_nonzero, p = .8, 
                                   list = FALSE, 
                                   times = 1)
 
-dat_train <- grid_schaden[trainIndex,]
-dat_test  <- grid_schaden[-trainIndex,]
+dat_train <- grid_data[trainIndex,]
+dat_test  <- grid_data[-trainIndex,]
 
 cat('Train rows: ', nrow(dat_train),"\n",
     'Test rows: ', nrow(dat_test),
@@ -69,7 +77,6 @@ fitControl <- trainControl(method = "repeatedcv",
                            repeats = 10)
 ```
 
-See: https://remiller1450.github.io/s230f19/caret2.html
 ```{r}
 ## Logistic regression
 logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
@@ -78,48 +85,71 @@ logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
                family = "binomial",
                trControl = fitControl)
 
-## Decision Tree
-logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
-               data = dat_train,
-               method="ctree",
-               family = "binomial",
-               trControl = fitControl)
-
 ## Boosted Random Forest
-gbmFit <- train(nonzero ~ Anzahl + VersSumme + poh + meshs,
-                data = dat_train, 
-                method = "gbm", 
+gbmFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+                data = dat_train,
+                method = "gbm",
                 trControl = fitControl,
                 verbose = FALSE)
 
-## Neuronal Network
-nnFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+## Neural Network
+nnetFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
                data = dat_train,
                method = "nnet",
                trControl = fitControl,
+               # tuneGrid = data.frame(size = 2, decay = 0),
                trace = FALSE)
 ```
 
 The plot function can be used to examine the relationship between the estimates of performance and the tuning parameters. For example, a simple invokation of the function shows the results for the first performance measure:
 ```{r}
 trellis.par.set(caretTheme())
-plot(gbmFit)  
+plot(nnetFit)
+plot(gbmFit)
 ```
-
-See: https://www.kaggle.com/code/sindhuee/r-caret-example/notebook
-
 Variable importance
 ```{r}
 varImp(logitFit)
+varImp(nnetFit)
+
+plot(varImp(object=logitFit),main="Logistic Regression - Variable Importance")
+plot(varImp(object=nnetFit),main="Neural Network - Variable Importance")
 ```
 
 Test set accuracy
 ```{r}
 ### predict on test dataset
-logitFit_pred<-predict(logitFit, dat_test)
+logitFit_pred <- predict(logitFit, dat_test)
+nnetFit_pred <- predict(nnetFit, dat_test)
 
 ##results
-confusionMatrix(logitFit_pred, dat_test$diagnosis)
+confusionMatrix(logitFit_pred, dat_test$fact_nonzero)
+confusionMatrix(nnetFit_pred, dat_test$fact_nonzero)
+
+table(dat_test$fact_nonzero, nnetFit_pred)
 ```
 
+Plot Neural Network Model
+(The B's stand for Bias)
+```{r}
+plotnet(nnetFit$finalModel)
+```
+See more about Neural Network: http://sebastianderi.com/aexam/hld_MODEL_neural.html
+
+See more about modelling with caret: See: https://remiller1450.github.io/s230f19/caret2.html
+
+
+Modelling loss with Neural Network Regression for those cells where a loss is predicted
+
+Regression using Artificial Neural Networks
+Why do we need to use Artificial Neural Networks for Regression instead of simply using Linear Regression?
+The purpose of using Artificial Neural Networks for Regression over Linear Regression is that the linear regression can only learn the linear relationship between the features and target and therefore cannot learn the complex non-linear relationship. In order to learn the complex non-linear relationship between the features and target, we are in need of other techniques. One of those techniques is to use Artificial Neural Networks. Artificial Neural Networks have the ability to learn the complex relationship between the features and target due to the presence of activation function in each layer. Let’s look at what are Artificial Neural Networks and how do they work.
+```{r}
+nnetFit_loss <- train(schad.SchadSum ~ Anzahl + VersSumme + poh + meshs,
+               data = subset(dat_train, nonzero == 1),
+               method = "nnet",
+               trControl = fitControl,
+               # tuneGrid = data.frame(size = 2, decay = 0),
+               trace = FALSE)
+```
 
