@@ -77,6 +77,7 @@ fitControl <- trainControl(method = "repeatedcv",
                            repeats = 10)
 ```
 
+# 1) Modeling of loss occurrence - Binary Classification "yes" or "no"
 ```{r}
 ## Logistic regression
 logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
@@ -85,12 +86,12 @@ logitFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
                family = "binomial",
                trControl = fitControl)
 
-## Boosted Random Forest
-gbmFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
-                data = dat_train,
-                method = "gbm",
-                trControl = fitControl,
-                verbose = FALSE)
+# ## Boosted Random Forest
+# gbmFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
+#                 data = dat_train,
+#                 method = "gbm",
+#                 trControl = fitControl,
+#                 verbose = FALSE)
 
 ## Neural Network
 nnetFit <- train(fact_nonzero ~ Anzahl + VersSumme + poh + meshs,
@@ -134,12 +135,21 @@ Plot Neural Network Model
 ```{r}
 plotnet(nnetFit$finalModel)
 ```
-See more about Neural Network: http://sebastianderi.com/aexam/hld_MODEL_neural.html
+- See more about Neural Network: http://sebastianderi.com/aexam/hld_MODEL_neural.html
+- See more about modelling with caret: https://remiller1450.github.io/s230f19/caret2.html
 
-See more about modelling with caret: See: https://remiller1450.github.io/s230f19/caret2.html
+*Confusion Matrix*
+We will focus on five key performance statistics (overall accuracy, sensitivity, specificity, precision, and negative predictive value). All of these statistics can be derived from a table that is central to evaluating performance in binary classification. This table is called a “confusion matrix” and is a 2x2 table that cross-tabulates predictions and actual outcomes (I use the terms “actual outcomes” and “reality” interchangeably throughout).
+For any other binary classification task, we can imagine we are trying to identify one of the two classes, which we refer to as “positive” cases. For example, in our present task, we might take the perspective that we are trying to identify which grid cells report at least one damage, and label these as positive cases (and "no damage" as "negative" cases). Thus, when we compare predictions to reality in binary classification there are only four possible outcomes: a positive case is correctly identified as a positive case (a “true positive”), a positive case is incorrectly identified as a negative case (a “false negative”), a negative case is correctly identified as a negative case (a “true negative”), and a negative case is incorrectly identified as a positive (a “false negative”). A confusion matrix simply counts up the number of times each of these four types of events happen.
+
+.                 | Prediction = Truth | Prediction = Lie
+----------------- | ------------------ | -----------------
+Reality = Truth   |	# True Positives   | # False Negatives
+Reality = Lie     | # False Positives  | # True Negatives
 
 
-Modelling loss with Neural Network Regression for those cells where a loss is predicted
+
+# 2) Modeling losses with Neural Network Regression for those Grid Cells for which a Loss is Predicted
 
 Regression using Artificial Neural Networks
 Why do we need to use Artificial Neural Networks for Regression instead of simply using Linear Regression?
